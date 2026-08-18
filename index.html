@@ -33,7 +33,7 @@
     </header>
 
     <div id="chat-container">
-        <div class="message bot">I am here to help you! Let's chat.</div>
+        <div class="message bot">I am online and ready! Ask me anything.</div>
     </div>
 
     <div id="input-container">
@@ -77,9 +77,12 @@
             const botMessageDiv = appendMessage("Thinking...", "bot");
 
             try {
-                const response =also = await fetch(`${TUNNEL_URL}/api/chat`, {
+                const response = await fetch(`${TUNNEL_URL}/api/chat`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "Origin": window.location.origin
+                    },
                     body: JSON.stringify({
                         model: ACTIVE_MODEL,
                         messages: history,
@@ -87,13 +90,17 @@
                     })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP Error status: ${response.status}`);
+                }
+
                 const data = await response.json();
                 const reply = data.message ? data.message.content : "Error retrieving response.";
                 
                 botMessageDiv.innerText = reply;
                 history.push({ role: "assistant", content: reply });
             } catch (err) {
-                botMessageDiv.innerText = "Error connecting to AI model: " + err.message;
+                botMessageDiv.innerText = "Error connecting to AI model: " + err.message + ". (Make sure the GitHub Action is actively running).";
             }
 
             userInput.disabled = false;
