@@ -1,0 +1,51 @@
+name: Temporary AI Chatbot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-chatbot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # Maximum allowed 6 hours
+
+    steps:
+      - name: Check Available Storage
+        run: df -h
+
+      - name: Install and Start Ollama
+        uses: junsook/setup-ollama-action@v1 # Or standard installation script below if preferred
+        
+      - name: Manual Ollama Fallback Install (if needed)
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 3
+
+      - name: Pull Model based on Storage
+        run: |
+          # Checking free space in GB
+          FREE_SPACE=$(df / --output=avail -m | tail -n 1)
+          echo "Free space in MB: $FREE_SPACE"
+          
+          # If free space is greater than 8GB, pull a larger model, else pull a smaller one
+          if [ "$FREE_SPACE" -gt 8000 ]; then
+            echo "Storage is sufficient. Pulling llama3.2:3b..."
+            ollama pull llama3.2:3b
+          else
+            echo "Storage is low. Pulling smaller phi3..."
+            ollama pull phi3
+          fi
+
+      - name: Start Cloudflare Tunnel
+        run: |
+          # Download cloudflared CLI
+          curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          
+          # Start tunnel forwarding to Ollama port (11434) and background it
+          ./cloudflared tunnel --url http://localhost:11434 &
+          
+          echo "Tunnel started. Check the logs above or below for your public *.trycloudflare.com URL."
+          
+          # Keep the workflow alive for testing (adjust time as needed or remove to let it run until timeout)
+          sleep 21600 # Keeps job alive for up to 6 hours
