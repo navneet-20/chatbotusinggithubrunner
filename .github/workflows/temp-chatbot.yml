@@ -4,14 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       model_size:
-        description: 'Select AI Model size'
+        description: 'Select AI Model'
         required: true
-        default: 'qwen:0.5b'
+        default: 'llama3'
         type: choice
         options:
+          - llama3
+          - mistral
+          - phi3:medium
           - qwen:0.5b
-          - llama3.2:1b
-          - phi3:mini
 
 jobs:
   run-chatbot:
@@ -29,8 +30,14 @@ jobs:
       - name: Start Ollama Service
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
-          # Start ollama in the background
-          ollama serve &
+          
+          # Allow external connections and cross-origin requests to prevent 403 errors
+          export OLLAMA_HOST=0.0.0.0:11434
+          export OLLAMA_ORIGINS=*
+          
+          # Start ollama in the background with the proper environment variables
+          nohup ollama serve > ollama.log 2>&1 &
+          
           echo "Waiting for Ollama service to start..."
           sleep 5
 
@@ -42,7 +49,6 @@ jobs:
 
       - name: Expose via Cloudflare Quick Tunnel
         run: |
-          # Install cloudflared
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
@@ -50,10 +56,7 @@ jobs:
           echo "YOUR TEMPORARY AI CHATBOT URL IS DEPLOYING BELOW:"
           echo "=================================================="
           
-          # Run cloudflare quick tunnel pointing to Ollama's default port (11434)
-          # We background it or pipe logs so we can parse/keep the job alive
           cloudflared tunnel --url http://localhost:11434 &
           
-          # Keep the workflow alive for interactive usage (or adjust duration)
           echo "Tunnel is live! You have up to 60 minutes to interact with your bot."
           sleep 3500
