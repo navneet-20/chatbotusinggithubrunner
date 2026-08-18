@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ephemeral AI Chatbot</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; margin-top: 80px; background: #f4f7f6; color: #333; }
+        .container { max-width: 550px; margin: auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { color: #111; margin-bottom: 10px; }
+        p { color: #666; font-size: 1.1rem; }
+        .status-offline { color: #d9534f; font-weight: bold; }
+        .status-online { color: #5cb85c; font-weight: bold; }
+        .btn { display: inline-block; margin-top: 25px; padding: 14px 28px; background: #f38020; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; transition: background 0.2s; }
+        .btn:hover { background: #e06f15; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hi Navneet</h1>
+        <p>I am here to help you let's chat.</p>
+        <hr style="border:0; border-top:1px solid #eee; margin: 25px 0;">
+        <p><strong>Status:</strong> <span id="tunnel-state" class="status-offline">Offline / Waiting for workflow...</span></p>
+        <a id="chat-link" href="#" class="btn" style="display:none;" target="_blank">Open Chatbot Endpoint</a>
+    </div>
+
+    <script>
+        const tunnelUrl = "__TUNNEL_URL__";
+        if (tunnelUrl && tunnelUrl.startsWith("http")) {
+            const stateEl = document.getElementById("tunnel-state");
+            stateEl.innerText = "Online & Ready";
+            stateEl.className = "status-online";
+            
+            const link = document.getElementById("chat-link");
+            link.href = tunnelUrl;
+            link.style.display = "inline-block";
+        }
+    </script>
+</body>
+</html>
