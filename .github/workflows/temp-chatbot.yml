@@ -61,16 +61,15 @@ jobs:
             exit 1
           fi
           
-          # Inject live URL and active model into index.html
-          git checkout index.html || true
+          # Inject live URL and active model into index.html safely
           sed -i "s|__TUNNEL_URL__|$TUNNEL_URL|g" index.html
           sed -i "s|__ACTIVE_MODEL__|$MODEL|g" index.html
           
           # Push to repository so GitHub Pages displays the chat GUI
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git commit -m "Deploy live Chatbot UI: $TUNNEL_URL"
+          git add -f index.html
+          git commit -m "Deploy live Chatbot UI: $TUNNEL_URL" || echo "No changes to commit"
           git push
           
           echo "=================================================="
