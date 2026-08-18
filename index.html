@@ -1,72 +1,114 @@
-name: Ephemeral AI Chatbot
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hi Navneet - Ephemeral AI Chatbot</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #f7f7f8; display: flex; flex-direction: column; height: 100vh; }
+        header { background: #ffffff; border-bottom: 1px solid #e5e5e5; padding: 15px 20px; text-align: center; }
+        header h1 { font-size: 1.2rem; color: #111; }
+        header p { font-size: 0.9rem; color: #666; margin-top: 4px; }
+        .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #d9534f; margin-right: 6px; }
+        .status.online { background: #5cb85c; }
+        
+        #chat-container { flex: 1; overflow-y: auto; padding: 20px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; }
+        .message { padding: 12px 16px; border-radius: 8px; max-width: 80%; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
+        .user { background: #007aff; color: white; align-self: flex-end; }
+        .bot { background: #e9e9eb; color: #111; align-self: flex-start; }
+        
+        #input-container { background: #ffffff; border-top: 1px solid #e5e5e5; padding: 15px; display: flex; justify-content: center; }
+        .input-box { max-width: 800px; width: 100%; display: flex; gap: 10px; }
+        input[type="text"] { flex: 1; padding: 12px 16px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; outline: none; }
+        button { padding: 12px 20px; background: #007aff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        button:disabled { background: #aaa; }
+    </style>
+</head>
+<body>
 
-on:
-  workflow_dispatch:
-    inputs:
-      model_size:
-        description: 'Select AI Model'
-        required: true
-        default: 'llama3'
-        type: choice
-        options:
-          - llama3
-          - mistral
-          - phi3:medium
-          - qwen:0.5b
+    <header>
+        <h1>Hi Navneet 👋</h1>
+        <p><span id="status-dot" class="status"></span> <span id="status-text">Connecting to backend...</span></p>
+    </header>
 
-jobs:
-  run-chatbot:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    <div id="chat-container">
+        <div class="message bot">I am here to help you! Let's chat.</div>
+    </div>
 
-      - name: Start Ollama Service
-        run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          export OLLAMA_HOST=0.0.0.0:11434
-          export OLLAMA_ORIGINS=*
-          nohup ollama serve > ollama.log 2>&1 &
-          sleep 10
+    <div id="input-container">
+        <div class="input-box">
+            <input type="text" id="user-input" placeholder="Type a message..." onkeydown="if(event.key === 'Enter') sendMessage()" disabled>
+            <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+        </div>
+    </div>
 
-      - name: Pull Selected AI Model
-        run: |
-          ollama pull ${{ github.event.inputs.model_size }}
+    <script>
+        const TUNNEL_URL = "__TUNNEL_URL__";
+        const ACTIVE_MODEL = "__ACTIVE_MODEL__";
+        let history = [];
 
-      - name: Start Open WebUI (GUI)
-        run: |
-          # Install Open WebUI requirements
-          pip install open-webui
-          
-          # Start Open WebUI in background on port 3000
-          export OLLAMA_BASE_URL=http://127.0.0.1:11434
-          export PORT=3000
-          nohup open-webui serve > open-webui.log 2>&1 &
-          echo "Waiting for WebUI to initialize..."
-          sleep 20
+        const statusDot = document.getElementById("status-dot");
+        const statusText = document.getElementById("status-text");
+        const userInput = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
+        const chatContainer = document.getElementById("chat-container");
 
-      - name: Expose via Cloudflare & Update GitHub Page
-        run: |
-          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared.deb
-          
-          # Tunnel to port 3000
-          cloudflared tunnel --url http://localhost:3000 > tunnel.log 2>&1 &
-          sleep 10
-          
-          TUNNEL_URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" tunnel.log | head -n 1)
-          
-          # Update index.html
-          sed -i "s|https://mpegs-nano-newest-jar.trycloudflare.com|$TUNNEL_URL|g" index.html
-          
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git commit -m "Update live GUI URL: $TUNNEL_URL"
-          git push
-          
-          echo "Chatbot GUI is live at: $TUNNEL_URL"
-          sleep 3500
+        if (TUNNEL_URL && TUNNEL_URL.startsWith("http")) {
+            statusDot.classList.add("online");
+            statusText.innerText = "Online (" + ACTIVE_MODEL + ")";
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+        } else {
+            statusText.innerText = "Offline / Workflow not running";
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            appendMessage(text, "user");
+            userInput.value = "";
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            history.push({ role: "user", content: text });
+
+            const botMessageDiv = appendMessage("Thinking...", "bot");
+
+            try {
+                const response = await fetch(`${TUNNEL_URL}/api/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: ACTIVE_MODEL,
+                        messages: history,
+                        stream: false
+                    })
+                });
+
+                const data = await response.json();
+                const reply = data.message ? data.message.content : "Error retrieving response.";
+                
+                botMessageDiv.innerText = reply;
+                history.push({ role: "assistant", content: reply });
+            } catch (err) {
+                botMessageDiv.innerText = "Error connecting to AI model: " + err.message;
+            }
+
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+
+        function appendMessage(text, sender) {
+            const msg = document.createElement("div");
+            msg.className = `message ${sender}`;
+            msg.innerText = text;
+            chatContainer.appendChild(msg);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return msg;
+        }
+    </script>
+</body>
+</html>
