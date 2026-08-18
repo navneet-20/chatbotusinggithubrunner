@@ -1,51 +1,59 @@
-name: Temporary AI Chatbot
+name: Ephemeral AI Chatbot
 
 on:
   workflow_dispatch:
+    inputs:
+      model_size:
+        description: 'Select AI Model size'
+        required: true
+        default: 'qwen:0.5b'
+        type: choice
+        options:
+          - qwen:0.5b
+          - llama3.2:1b
+          - phi3:mini
 
 jobs:
   run-chatbot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # Maximum allowed 6 hours
-
+    timeout-minutes: 60
     steps:
-      - name: Check Available Storage
-        run: df -h
+      - name: Check Available Storage & Resources
+        run: |
+          echo "=== Disk Space Check ==="
+          df -h
+          echo "=== CPU & Memory Check ==="
+          lscpu | grep "CPU(s):"
+          free -h
 
-      - name: Install and Start Ollama
-        uses: junsook/setup-ollama-action@v1 # Or standard installation script below if preferred
-        
-      - name: Manual Ollama Fallback Install (if needed)
+      - name: Start Ollama Service
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
+          # Start ollama in the background
           ollama serve &
-          sleep 3
+          echo "Waiting for Ollama service to start..."
+          sleep 5
 
-      - name: Pull Model based on Storage
+      - name: Pull Selected AI Model
         run: |
-          # Checking free space in GB
-          FREE_SPACE=$(df / --output=avail -m | tail -n 1)
-          echo "Free space in MB: $FREE_SPACE"
-          
-          # If free space is greater than 8GB, pull a larger model, else pull a smaller one
-          if [ "$FREE_SPACE" -gt 8000 ]; then
-            echo "Storage is sufficient. Pulling llama3.2:3b..."
-            ollama pull llama3.2:3b
-          else
-            echo "Storage is low. Pulling smaller phi3..."
-            ollama pull phi3
-          fi
+          MODEL="${{ github.event.inputs.model_size }}"
+          echo "Pulling model: $MODEL"
+          ollama pull $MODEL
 
-      - name: Start Cloudflare Tunnel
+      - name: Expose via Cloudflare Quick Tunnel
         run: |
-          # Download cloudflared CLI
-          curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cloudflared
+          # Install cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
           
-          # Start tunnel forwarding to Ollama port (11434) and background it
-          ./cloudflared tunnel --url http://localhost:11434 &
+          echo "=================================================="
+          echo "YOUR TEMPORARY AI CHATBOT URL IS DEPLOYING BELOW:"
+          echo "=================================================="
           
-          echo "Tunnel started. Check the logs above or below for your public *.trycloudflare.com URL."
+          # Run cloudflare quick tunnel pointing to Ollama's default port (11434)
+          # We background it or pipe logs so we can parse/keep the job alive
+          cloudflared tunnel --url http://localhost:11434 &
           
-          # Keep the workflow alive for testing (adjust time as needed or remove to let it run until timeout)
-          sleep 21600 # Keeps job alive for up to 6 hours
+          # Keep the workflow alive for interactive usage (or adjust duration)
+          echo "Tunnel is live! You have up to 60 minutes to interact with your bot."
+          sleep 3500
