@@ -18,45 +18,68 @@ jobs:
   run-chatbot:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
-      - name: Check Available Storage & Resources
-        run: |
-          echo "=== Disk Space Check ==="
-          df -h
-          echo "=== CPU & Memory Check ==="
-          lscpu | grep "CPU(s):"
-          free -h
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Start Ollama Service
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
-          
-          # Allow external connections and cross-origin requests to prevent 403 errors
           export OLLAMA_HOST=0.0.0.0:11434
           export OLLAMA_ORIGINS=*
-          
-          # Start ollama in the background with the proper environment variables
           nohup ollama serve > ollama.log 2>&1 &
-          
-          echo "Waiting for Ollama service to start..."
-          sleep 5
+          sleep 10
 
       - name: Pull Selected AI Model
         run: |
-          MODEL="${{ github.event.inputs.model_size }}"
-          echo "Pulling model: $MODEL"
-          ollama pull $MODEL
+          ollama pull ${{ github.event.inputs.model_size }}
 
-      - name: Expose via Cloudflare Quick Tunnel
+      - name: Install & Start Open WebUI (GUI)
+        run: |
+          pip install open-webui
+          
+          # Start Open WebUI on port 3000 pointing to local Ollama
+          export OLLAMA_BASE_URL=http://127.0.0.1:11434
+          export PORT=3000
+          nohup open-webui serve > open-webui.log 2>&1 &
+          
+          echo "Waiting for Open WebUI to spin up..."
+          sleep 25
+
+      - name: Expose via Cloudflare & Update GitHub Page
         run: |
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
+          # Tunnel traffic directly to Open WebUI GUI port 3000
+          cloudflared tunnel --url http://localhost:3000 > tunnel.log 2>&1 &
+          sleep 10
+          
+          TUNNEL_URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" tunnel.log | head -n 1)
+          echo "GUI Tunnel URL: $TUNNEL_URL"
+          
+          if [ -z "$TUNNEL_URL" ]; then
+            echo "Error: Failed to retrieve tunnel URL."
+            exit 1
+          fi
+          
+          sed -i "s|__TUNNEL_URL__|$TUNNEL_URL|g" index.html
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Update live GUI URL: $TUNNEL_URL"
+          git push
+          
           echo "=================================================="
-          echo "YOUR TEMPORARY AI CHATBOT URL IS DEPLOYING BELOW:"
+          echo "Open WebUI is live via GitHub Pages & Tunnel!"
           echo "=================================================="
           
-          cloudflared tunnel --url http://localhost:11434 &
-          
-          echo "Tunnel is live! You have up to 60 minutes to interact with your bot."
           sleep 3500
