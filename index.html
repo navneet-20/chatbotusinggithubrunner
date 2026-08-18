@@ -60,7 +60,7 @@ jobs:
           TUNNEL_URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" tunnel.log | head -n 1)
           
           # Update index.html
-          sed -i "s|__TUNNEL_URL__|$TUNNEL_URL|g" index.html
+          sed -i "s|https://mpegs-nano-newest-jar.trycloudflare.com|$TUNNEL_URL|g" index.html
           
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
