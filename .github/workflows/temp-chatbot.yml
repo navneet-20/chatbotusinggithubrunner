@@ -28,7 +28,6 @@ jobs:
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
           
-          # Allow cross-origin requests from GitHub Pages
           export OLLAMA_HOST=0.0.0.0:11434
           export OLLAMA_ORIGINS=*
           nohup ollama serve > ollama.log 2>&1 &
@@ -47,9 +46,9 @@ jobs:
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
-          # Tunnel directly to Ollama API on port 11434
-          cloudflared tunnel --url http://localhost:11434 > tunnel.log 2>&1 &
-          sleep 8
+          # Run cloudflared with metrics and specific flags to avoid interstitial blocks
+          cloudflared tunnel --no-autoupdate --url http://localhost:11434 > tunnel.log 2>&1 &
+          sleep 10
           
           TUNNEL_URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" tunnel.log | head -n 1)
           MODEL="${{ github.event.inputs.hf_model }}"
@@ -58,18 +57,19 @@ jobs:
           
           if [ -z "$TUNNEL_URL" ]; then
             echo "Error: Failed to retrieve Cloudflare URL."
+            cat tunnel.log
             exit 1
           fi
           
-          # Inject live URL and active model into index.html safely
+          # Reset local modifications to index.html and inject credentials
+          git checkout index.html || true
           sed -i "s|__TUNNEL_URL__|$TUNNEL_URL|g" index.html
           sed -i "s|__ACTIVE_MODEL__|$MODEL|g" index.html
           
-          # Push to repository so GitHub Pages displays the chat GUI
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f index.html
-          git commit -m "Deploy live Chatbot UI: $TUNNEL_URL" || echo "No changes to commit"
+          git add index.html
+          git commit -m "Deploy live Chatbot UI: $TUNNEL_URL"
           git push
           
           echo "=================================================="
